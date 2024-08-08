@@ -7,9 +7,9 @@ use serde_json::{json, Value};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sample_rate = 8000;
-    let api_key = "9L1tOnU1okWGRrO2oB2RZTOCSoZEMVofCjhB3lYREgw=";
+    let api_key = std::env::var("TCS_APIKEY").unwrap();
     let secret_key = base64::engine::general_purpose::STANDARD
-        .decode("Dm8zMWsTFFBP3MwMvHKkNM1L+nmvSInWqMX/sdAWoqo=")
+        .decode(std::env::var("TCS_SECRET").unwrap())
         .unwrap();
     let mut args = std::env::args();
     let _ = args.next();
