@@ -47,8 +47,8 @@ def authorization_metadata(api_key, secret_key, scope, type=list):
 
 
 def main():
-    api_key = "86EE/8YiCMTFdjEXzSQc5ky66LX3gAUqOS9H4X8WcJ8="
-    secret_key = "44Z9UHAjqr3uyMqa4jZkE7x/N1rI2MznQY87uS+SITY="
+    api_key = "jkhlksgkldglicsbw;becb;c="
+    secret_key = "smcbhbcaslk.buldabkcdan="
     metadata = authorization_metadata(api_key, secret_key, "tinkoff.cloud.tts")
     print(metadata)
 
