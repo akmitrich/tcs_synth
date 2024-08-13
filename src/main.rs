@@ -1,6 +1,8 @@
 use base64::Engine;
-use serde_json::{json, Value};
-use std::io::Write;
+
+mod tcs {
+    tonic::include_proto!("tinkoff.cloud.tts.v1");
+}
 
 #[tokio::main]
 async fn main() {
@@ -10,39 +12,25 @@ async fn main() {
     let secret_key = base64::engine::general_purpose::STANDARD
         .decode(std::env::var("TCS_SECRET").unwrap())
         .unwrap();
-    println!("Run with {:?} -- {:?}", api_key, secret_key);
-    let mut args = std::env::args();
-    let _ = args.next();
-    let text = args.next().unwrap();
-    let output_path = args.next().unwrap();
 
     let jwt = generate(&api_key, &secret_key);
-    let req_body = json!({"input": {"text": text}, "audioConfig": {"audioEncoding": "LINEAR16","sampleRateHertz": sample_rate}, "voice": {"name": "alyona"}});
-    let client = reqwest::Client::new();
-    let req = client
-        .post("https://api.tinkoff.ai:443/v1/tts:synthesize")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", jwt))
-        .json(&req_body);
-    let resp = req.send().await.unwrap();
-    println!("Response from TTS: {:?}", resp);
-    let status_code = resp.status();
-    let resp_json = resp.json::<Value>().await.unwrap();
-    println!("TTS status code {:?}", status_code);
-
-    let wav = base64::engine::general_purpose::STANDARD
-        .decode(resp_json["audio_content"].as_str().unwrap())
-        .unwrap();
-    let mut f = std::fs::File::create(output_path).unwrap();
-    f.write_all(wav.as_slice()).unwrap();
+    println!("JWT={}", jwt);
+    let mut client = grpc_client().await;
+    println!("CLIENT: {:?}", client);
+    let mut voice_req = tonic::Request::new(tcs::ListVoicesRequest {});
+    voice_req
+        .metadata_mut()
+        .append("authorization", format!("Bearer {}", jwt).parse().unwrap());
+    let voice_resp = client.list_voices(voice_req).await.unwrap();
+    println!("VOICES: {:?}", voice_resp.into_inner().voices);
 }
 
 fn generate(api_key: &str, secret_key: &[u8]) -> String {
-    let claims = json!({
+    let claims = serde_json::json!({
         "iss": "synth",
         "sub": "akmitrich",
         "aud": "tinkoff.cloud.tts",
-        "exp": chrono::Local::now().timestamp() + 3600,
+        "exp": chrono::Local::now().timestamp() + 60,
     });
     let header = jsonwebtoken::Header {
         kid: Some(api_key.to_owned()),
@@ -55,4 +43,19 @@ fn generate(api_key: &str, secret_key: &[u8]) -> String {
         &jsonwebtoken::EncodingKey::from_secret(secret_key),
     )
     .unwrap()
+}
+
+fn tls_config() -> tonic::transport::ClientTlsConfig {
+    tonic::transport::ClientTlsConfig::new().with_native_roots()
+}
+
+async fn grpc_client() -> tcs::text_to_speech_client::TextToSpeechClient<tonic::transport::Channel>
+{
+    let channel = tonic::transport::Channel::from_static("https://api.tinkoff.ai:443")
+        .tls_config(tls_config())
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+    tcs::text_to_speech_client::TextToSpeechClient::new(channel)
 }
