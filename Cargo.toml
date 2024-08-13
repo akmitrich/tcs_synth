@@ -10,7 +10,8 @@ dotenv = "0.15"
 jsonwebtoken = "9"
 serde_json = { version = "1.0.105" }
 prost = "0.13"
-tokio = { version = "1.31.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.31.0", features = ["macros", "rt-multi-thread", "fs"] }
+tokio-stream = "0.1"
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }
 
 [build-dependencies]

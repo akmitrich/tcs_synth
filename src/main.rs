@@ -1,4 +1,6 @@
 use base64::Engine;
+use tokio::io::AsyncWriteExt;
+use tokio_stream::StreamExt;
 
 mod tcs {
     tonic::include_proto!("tinkoff.cloud.tts.v1");
@@ -7,11 +9,17 @@ mod tcs {
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
-    let sample_rate = 8000;
+    let sample_rate_hertz = 8000;
     let api_key = std::env::var("TCS_APIKEY").unwrap();
     let secret_key = base64::engine::general_purpose::STANDARD
         .decode(std::env::var("TCS_SECRET").unwrap())
         .unwrap();
+    let mut args = std::env::args();
+    let output_path = args.nth(1).unwrap();
+    let text = args.next().unwrap_or_else(|| {
+        String::from("Оптимал Сити Текнолоджис предоставляет наилучший сервис.")
+    });
+    let voice = args.next().unwrap_or_else(|| String::from("flirt"));
 
     let jwt = generate(&api_key, &secret_key);
     println!("JWT={}", jwt);
@@ -23,6 +31,34 @@ async fn main() {
         .append("authorization", format!("Bearer {}", jwt).parse().unwrap());
     let voice_resp = client.list_voices(voice_req).await.unwrap();
     println!("VOICES: {:?}", voice_resp.into_inner().voices);
+    let mut req = tonic::Request::new(tcs::SynthesizeSpeechRequest {
+        input: Some(tcs::SynthesisInput {
+            text,
+            ssml: String::new(),
+        }),
+        voice: Some(tcs::VoiceSelectionParams { name: voice }),
+        audio_config: Some(tcs::AudioConfig {
+            audio_encoding: tcs::AudioEncoding::Linear16.into(),
+            speaking_rate: 1.0,
+            pitch: 1.0,
+            sample_rate_hertz,
+        }),
+    });
+    req.metadata_mut()
+        .append("authorization", format!("Bearer {}", jwt).parse().unwrap());
+    let resp = client.streaming_synthesize(req).await.unwrap();
+    let mut chunks = resp.into_inner();
+    let mut output = tokio::fs::File::create(output_path).await.unwrap();
+    while let Some(chunk) = chunks.next().await {
+        match chunk {
+            Ok(data) => {
+                println!("data: {} bytes.", data.audio_chunk.len());
+                output.write_all(data.audio_chunk.as_slice()).await.unwrap();
+            }
+            Err(e) => println!("FAILED: {:?}", e),
+        }
+    }
+    println!("OK.");
 }
 
 fn generate(api_key: &str, secret_key: &[u8]) -> String {
