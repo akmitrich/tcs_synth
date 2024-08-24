@@ -47,6 +47,7 @@ async fn main() {
     req.metadata_mut()
         .append("authorization", format!("Bearer {}", jwt).parse().unwrap());
     let resp = client.streaming_synthesize(req).await.unwrap();
+    println!("Request ID {:?}", resp.metadata().get("x-request-id"));
     let mut chunks = resp.into_inner();
     let mut output = tokio::fs::File::create(output_path).await.unwrap();
     while let Some(chunk) = chunks.next().await {
